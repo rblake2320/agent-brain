@@ -6,6 +6,9 @@ from . import tool
 
 _store = MemoryStore()
 
+# Sections that cannot be modified by the agent (hardened against poisoning)
+_IMMUTABLE_SECTIONS = {"Identity"}
+
 
 @tool(
     name="memory_read",
@@ -57,5 +60,16 @@ async def memory_read(section: str | None = None) -> str:
     },
 )
 async def memory_write(section: str, content: str, mode: str = "append") -> str:
+    if section in _IMMUTABLE_SECTIONS:
+        return f"[BLOCKED] Section '{section}' is immutable and cannot be modified."
+    # Block instruction-like content that could poison future system prompts
+    _poison_patterns = [
+        "ignore previous", "ignore all", "you are now", "new instructions",
+        "system prompt", "from now on", "override", "maintenance mode",
+    ]
+    content_lower = content.lower()
+    for pattern in _poison_patterns:
+        if pattern in content_lower:
+            return f"[BLOCKED] Memory content contains instruction-injection pattern: '{pattern}'"
     _store.write(section, content, mode)
     return f"Memory section '{section}' updated ({mode} mode)."

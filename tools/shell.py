@@ -11,18 +11,45 @@ from . import tool
 
 # Commands/patterns that are always blocked
 _BLOCKLIST = [
+    # === Destructive ===
     re.compile(r"\brm\s+-[a-z]*r[a-z]*f\b", re.IGNORECASE),       # rm -rf
     re.compile(r"\bformat\b", re.IGNORECASE),                       # Windows format
     re.compile(r"\bdel\s+/s\b", re.IGNORECASE),                    # del /s
     re.compile(r"\brd\s+/s\b", re.IGNORECASE),                     # rd /s
     re.compile(r"\bshutdown\b", re.IGNORECASE),
     re.compile(r"\breboot\b", re.IGNORECASE),
-    re.compile(r"\breg\s+(delete|add)\b", re.IGNORECASE),          # reg delete/add
+    re.compile(r"\breg\s+(delete|add)\b", re.IGNORECASE),
     re.compile(r"\bnetsh\s+.*?firewall\b", re.IGNORECASE),
-    re.compile(r">\s*/dev/sd", re.IGNORECASE),                      # writing to raw disk
+    re.compile(r">\s*/dev/sd", re.IGNORECASE),
     re.compile(r"\bdd\s+.*?of=/dev/sd", re.IGNORECASE),
     re.compile(r"\bkillall\b", re.IGNORECASE),
     re.compile(r"\bpkill\s+-9\b", re.IGNORECASE),
+    re.compile(r":\(\)\s*\{.*\|.*&\s*\}\s*;", re.IGNORECASE),     # fork bomb
+
+    # === Arbitrary code execution (injection risk) ===
+    re.compile(r"\bpython\s+-c\b", re.IGNORECASE),
+    re.compile(r"\bpython3\s+-c\b", re.IGNORECASE),
+    re.compile(r"\bpowershell\s+(-c|-Command|-enc)", re.IGNORECASE),
+    re.compile(r"\bcmd\s+/c\b", re.IGNORECASE),
+    re.compile(r"\bnode\s+-e\b", re.IGNORECASE),
+
+    # === Exfiltration ===
+    re.compile(r"\bcurl\b.*https?://", re.IGNORECASE),
+    re.compile(r"\bwget\b.*https?://", re.IGNORECASE),
+    re.compile(r"\bInvoke-WebRequest\b", re.IGNORECASE),
+    re.compile(r"\bInvoke-RestMethod\b", re.IGNORECASE),
+    re.compile(r"\bnc\b\s+-", re.IGNORECASE),                      # netcat
+    re.compile(r"\bncat\b", re.IGNORECASE),
+
+    # === Credential/secret reading outside workspace ===
+    re.compile(r"\b(cat|type|more|less|head|tail|Get-Content)\b.*\.(env|key|pem|token|secret)", re.IGNORECASE),
+    re.compile(r"\b(cat|type|more)\b.*\\\.ssh\\", re.IGNORECASE),
+    re.compile(r"\b(cat|type|more)\b.*\\\.nvidia", re.IGNORECASE),
+    re.compile(r"\bprintenv\b", re.IGNORECASE),
+
+    # === Package installation (supply chain) ===
+    re.compile(r"\bpip\s+install\b", re.IGNORECASE),
+    re.compile(r"\bnpm\s+install\b", re.IGNORECASE),
 ]
 
 

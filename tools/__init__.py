@@ -7,6 +7,15 @@ from typing import Any, Callable
 
 TOOL_REGISTRY: dict[str, "ToolDef"] = {}
 
+# Callback for human approval gate — set by the agent before running.
+# Signature: async def(tool_name: str, arguments: dict) -> bool
+_approval_callback: Callable | None = None
+
+
+def set_approval_callback(fn: Callable) -> None:
+    global _approval_callback
+    _approval_callback = fn
+
 
 @dataclass
 class ToolDef:
@@ -52,10 +61,24 @@ def get_openai_tools_schema() -> list[dict]:
 
 
 async def execute_tool(name: str, arguments: dict[str, Any]) -> str:
-    """Dispatch a tool call by name. Returns string output."""
+    """Dispatch a tool call by name. Enforces approval gate for sensitive tools."""
     if name not in TOOL_REGISTRY:
         return f"[ERROR] Unknown tool: {name}. Available: {list(TOOL_REGISTRY.keys())}"
     td = TOOL_REGISTRY[name]
+
+    # Approval gate — blocks execution until human confirms
+    if td.requires_approval:
+        if _approval_callback is None:
+            return (
+                f"[BLOCKED] Tool '{name}' requires human approval but no approval "
+                f"callback is configured. Args: {str(arguments)[:200]}"
+            )
+        approved = _approval_callback(name, arguments)
+        if asyncio.iscoroutine(approved):
+            approved = await approved
+        if not approved:
+            return f"[DENIED] Human denied execution of '{name}' with args: {str(arguments)[:200]}"
+
     try:
         result = td.handler(**arguments)
         if asyncio.iscoroutine(result):

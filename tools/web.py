@@ -126,6 +126,15 @@ async def web_search(query: str, num_results: int = 5) -> str:
     return "\n".join(lines)
 
 
+_MAX_RESPONSE_BYTES = 512 * 1024  # 512KB max download to prevent OOM
+
+# Exfiltration detection — long query strings or base64 blobs in URL
+_EXFIL_PATTERNS = re.compile(
+    r"\?[^#]{200,}|"              # query string > 200 chars
+    r"[?&]\w+=[A-Za-z0-9+/=]{100,}",  # base64-like param > 100 chars
+)
+
+
 @tool(
     name="web_fetch",
     description=(
@@ -147,19 +156,38 @@ async def web_search(query: str, num_results: int = 5) -> str:
 async def web_fetch(url: str) -> str:
     if _SSRF_BLOCKED.match(url):
         return f"[BLOCKED] Cannot fetch internal/private network URLs: {url}"
+    if _EXFIL_PATTERNS.search(url):
+        return f"[BLOCKED] URL contains suspicious exfiltration pattern (long query/encoded data): {url[:100]}"
     try:
         async with httpx.AsyncClient(
             timeout=30,
-            follow_redirects=True,
+            follow_redirects=False,  # Don't follow redirects blindly
             headers=_HEADERS,
+            max_redirects=0,
         ) as client:
             resp = await client.get(url)
+
+            # Handle redirects manually — validate each target
+            redirect_count = 0
+            while resp.is_redirect and redirect_count < 3:
+                redirect_count += 1
+                location = resp.headers.get("location", "")
+                if _SSRF_BLOCKED.match(location):
+                    return f"[BLOCKED] Redirect target is internal/blocked: {location}"
+                resp = await client.get(location)
+
             resp.raise_for_status()
+
+            # Enforce size limit before reading body
+            content_length = resp.headers.get("content-length")
+            if content_length and int(content_length) > _MAX_RESPONSE_BYTES:
+                return f"[BLOCKED] Response too large ({content_length} bytes, max {_MAX_RESPONSE_BYTES})"
+
             content_type = resp.headers.get("content-type", "")
             if "text/html" in content_type or "text/plain" in content_type:
-                text = _strip_html(resp.text)
+                text = _strip_html(resp.text[:_MAX_RESPONSE_BYTES])
             else:
-                text = resp.text
+                text = resp.text[:_MAX_RESPONSE_BYTES]
     except httpx.HTTPStatusError as exc:
         return f"[ERROR] HTTP {exc.response.status_code} for {url}"
     except Exception as exc:
