@@ -1,0 +1,21 @@
+# Runtime state
+data/memory/
+data/sessions/
+data/logs/
+data/sandbox/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Env / secrets
+.env
+*.env
