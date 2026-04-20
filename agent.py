@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ from .config import (
     MEMORY_CONTEXT_MAX_CHARS,
     PKA_ROOT,
     SESSIONS_DIR,
+    TOOL_OUTPUT_MAX_CHARS,
 )
 from .context import ContextManager
 from .llm import ChatResponse, ModelRouter, OllamaClient
@@ -55,7 +57,9 @@ class GuardrailBridge:
     def __init__(self):
         self._available = False
         try:
-            sys.path.insert(0, str(PKA_ROOT / "scripts"))
+            _scripts = str(PKA_ROOT / "scripts")
+            if _scripts not in sys.path:
+                sys.path.insert(0, _scripts)
             from pka_guardrails import check_secret_guardrail, check_scope_guardrail, log_violation
             self._check_secret = check_secret_guardrail
             self._check_scope = check_scope_guardrail
@@ -155,7 +159,8 @@ class AgentBrain:
         self.audit = AuditLogger()
         self.sessions = SessionStore()
         self.session_id = session_id or str(uuid.uuid4()).replace("-", "")[:12]
-        self._history: list[dict] = []
+        # Restore from disk if session exists
+        self._history: list[dict] = self.sessions.load(self.session_id)
 
     def _build_system_prompt(self) -> str:
         memory_ctx = self.memory.get_context_block(MEMORY_CONTEXT_MAX_CHARS)
@@ -249,13 +254,11 @@ class AgentBrain:
             if resp.has_tool_calls:
                 for tc in resp.tool_calls:
                     print_fn(f"    → tool: {tc.name}({list(tc.arguments.keys())})")
-                    import time
                     t0 = time.monotonic()
                     result = await execute_tool(tc.name, tc.arguments)
                     elapsed_ms = int((time.monotonic() - t0) * 1000)
 
                     # Truncate long tool results for context efficiency
-                    from .config import TOOL_OUTPUT_MAX_CHARS
                     if len(result) > TOOL_OUTPUT_MAX_CHARS:
                         result = result[:TOOL_OUTPUT_MAX_CHARS] + f"\n...[truncated]"
 

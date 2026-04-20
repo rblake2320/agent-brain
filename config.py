@@ -23,9 +23,7 @@ READONLY_PATHS = {
     PKA_ROOT / "MEMORY.md",
     PKA_ROOT / "Owner's Inbox" / "owner.md",
 }
-READONLY_DIRS = {
-    PKA_ROOT / "Owner's Inbox",
-}
+READONLY_DIRS: set[Path] = set()  # Agent CAN write to Owner's Inbox (deliverables go there)
 
 # ---------------------------------------------------------------------------
 # Ollama endpoints

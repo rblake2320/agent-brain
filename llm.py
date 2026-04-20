@@ -105,8 +105,7 @@ class OllamaClient:
     async def _post(self, endpoint: str, payload: dict, timeout: float) -> ChatResponse:
         url = f"{endpoint}/v1/chat/completions"
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = client.post(url, json=payload)
-            resp = await resp
+            resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
 

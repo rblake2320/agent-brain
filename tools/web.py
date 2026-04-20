@@ -15,6 +15,18 @@ _HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+# SSRF blocklist — prevent fetching metadata/loopback services
+# NOTE: 192.168.x.x and 10.x.x.x are allowed since agent uses LAN to reach Spark nodes
+_SSRF_BLOCKED = re.compile(
+    r"^https?://"
+    r"(127\.\d+\.\d+\.\d+|localhost|"  # loopback
+    r"169\.254\.\d+\.\d+|"             # AWS metadata / link-local
+    r"0\.0\.0\.0|"                      # wildcard
+    r"\[?::1\]?)"                       # IPv6 loopback
+    r"(:\d+)?(/|$)",
+    re.IGNORECASE,
+)
+
 _TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s{3,}")
 _SCRIPT_STYLE_RE = re.compile(
@@ -133,6 +145,8 @@ async def web_search(query: str, num_results: int = 5) -> str:
     },
 )
 async def web_fetch(url: str) -> str:
+    if _SSRF_BLOCKED.match(url):
+        return f"[BLOCKED] Cannot fetch internal/private network URLs: {url}"
     try:
         async with httpx.AsyncClient(
             timeout=30,

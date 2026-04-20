@@ -6,7 +6,7 @@ import re
 import shlex
 from pathlib import Path
 
-from ..config import SANDBOX_DIR, SHELL_TIMEOUT_S, TOOL_OUTPUT_MAX_CHARS
+from ..config import DATA_DIR, PKA_ROOT, SANDBOX_DIR, SHELL_TIMEOUT_S, TOOL_OUTPUT_MAX_CHARS
 from . import tool
 
 # Commands/patterns that are always blocked
@@ -72,7 +72,18 @@ async def shell_exec(
 
     timeout = min(timeout, SHELL_TIMEOUT_S)
 
-    cwd = Path(working_dir) if working_dir else SANDBOX_DIR
+    cwd = Path(working_dir).resolve() if working_dir else SANDBOX_DIR
+    # Scope check: working_dir must be inside PKA_ROOT, DATA_DIR, or default sandbox
+    in_scope = False
+    for root in (PKA_ROOT, DATA_DIR, SANDBOX_DIR):
+        try:
+            cwd.relative_to(root)
+            in_scope = True
+            break
+        except ValueError:
+            pass
+    if not in_scope:
+        return f"[BLOCKED] Working directory is outside workspace scope: {cwd}"
     cwd.mkdir(parents=True, exist_ok=True)
 
     try:

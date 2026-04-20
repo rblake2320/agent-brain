@@ -138,9 +138,11 @@ async def file_write(path: str, content: str, mode: str = "write") -> str:
         return err
 
     # Secret scan
-    import sys
-    sys.path.insert(0, str(PKA_ROOT / "scripts"))
     try:
+        import sys
+        _scripts = str(PKA_ROOT / "scripts")
+        if _scripts not in sys.path:
+            sys.path.insert(0, _scripts)
         from pka_guardrails import check_secret_guardrail
         violations = check_secret_guardrail("Write", {"content": content})
         if violations:
@@ -150,9 +152,11 @@ async def file_write(path: str, content: str, mode: str = "write") -> str:
 
     try:
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        open_mode = "a" if mode == "append" else "w"
-        resolved.write_text(content, encoding="utf-8") if open_mode == "w" else \
-            resolved.open("a", encoding="utf-8").write(content)
+        if mode == "append":
+            with resolved.open("a", encoding="utf-8") as f:
+                f.write(content)
+        else:
+            resolved.write_text(content, encoding="utf-8")
         return f"Written {len(content)} chars to {resolved}"
     except Exception as exc:
         return f"[ERROR] Could not write file: {exc}"
